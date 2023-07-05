@@ -1,0 +1,7 @@
+*.o
+a.out
+*.d
+*.a
+obj/
+dep/
+ft_ls
