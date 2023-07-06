@@ -40,7 +40,7 @@ DEP 		=	$(patsubst $(SRC_DIR)%, $(DEP_DIR)%, $(SRC:.c=.d))
 ################################################################################
 
 all:
-			@$(foreach lib, $(LIB_LIST), make -C $(lib))
+			@$(foreach lib, $(LIB_LIST), $(MAKE) -C $(lib))
 			@$(MAKE) $(NAME)
 
 $(OBJ_DIR)%.o: $(SRC_DIR)%.c Makefile
@@ -60,13 +60,13 @@ $(DEP_DIR):
 			@echo "creating.. $@"
 
 clean:
-			@$(foreach lib, $(LIB_LIST), make clean -C $(lib))
+			@$(foreach lib, $(LIB_LIST), $(MAKE) clean -C $(lib))
 			@$(RM) $(OBJ_DIR) $(DEP_DIR)
 			@echo "removing.. $(OBJ_DIR)"
 			@echo "removing.. $(DEP_DIR)"
 
 fclean:
-			@$(foreach lib, $(LIB_LIST), make fclean -C $(lib))
+			@$(foreach lib, $(LIB_LIST), $(MAKE) fclean -C $(lib))
 			@$(MAKE) clean
 			@$(RM) $(NAME)
 			@echo "removing.. $(NAME)"
