@@ -4,13 +4,15 @@
 
 #include <stdio.h>
 #include <dirent.h>
+#include <sys/dirent.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <sys/types.h>
 #include <stdbool.h>
+#include <unistd.h>
 
-#include "ft_ls.h"
-#include "file.h"
+#include "../inc/ft_ls.h"
+#include "../inc/file.h"
 
 struct column_info {
 	bool	valid;
@@ -67,35 +69,72 @@ init_colum_info(size_t max_idx, size_t total_files)
 	}
 }
 
-int
-main(void)
+
+typedef struct s_directory
 {
-	DIR *dir = opendir(".");
-	if (!dir) {
-		write(2, "ft_ls: ", 7);
-		perror("nc");
-		return 1;
-	}
-	struct dirent *rdir;
-	t_file *file = NULL;
-	size_t n = 0;
-	while ((rdir = readdir(dir))) {
-		add_lexicographical(&file, rdir);
-		n++;
-	}
+    char *name;
+    t_file *files;
+    struct s_directory *next;
+} t_directory;
 
-	#ifdef TIOCGWINSZ
-		int cols = 0;
-		struct winsize ws;
+void
+dir_add_back(t_directory **dir, char *dir_name)
+{
+    t_directory *temp = *dir;
+    
+    while (temp->next)
+        temp = temp->next;
+    temp->next = ft_calloc(sizeof(t_directory), 1);
+    temp->next->name = dir_name;
+}
 
-		if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != -1 && 0 < ws.ws_col && ws.ws_col == (size_t) ws.ws_col)
-			cols = ws.ws_col;
-	#endif
+int
+open_directory(char *dir_name)
+{
+    struct dirent *rdir;
+    t_directory *temp;
+    DIR *dir;
 
-	init_colum_info(cols / 3 + 1, n);
+    dir = opendir(dir_name);
+    if (!dir) {
+        write(2, "ft_ls: ", 7);
+        perror(dir_name);
+        return 1;
+    }
+    temp = calloc(sizeof(t_directory), 1);
+    if (!temp)
+        return 1;
+    temp->name = dir_name;
+    while ((rdir = readdir(dir))) {
+        add_lexicographical(&(temp->files), rdir);
+        if (rdir->d_type & DT_DIR && ft_strncmp("..", rdir->d_name, ft_strlen(rdir->d_name)) < 0) {
+            char *_temp = ft_strjoin(dir_name, "/");
+            dir_add_back(&temp, ft_strjoin(_temp, rdir->d_name));
+            free(_temp);
+        }
+    }
+    closedir(dir);
+    for (t_file *i = temp->files; i; i = i->next)
+        ft_printf("%s\n", i->rdir->d_name);
+    temp = temp->next;
+    for (; temp; temp = temp->next) {
+        ft_printf("%s\n", temp->name);
+        open_directory(temp->name);
+    }
+    return 0;
+}
 
-	for (t_file *i = file; i != NULL; i = i->next)
-		ft_printf("%s\n", i->rdir->d_name);
-	closedir(dir);
+int
+main(int ac, char **av)
+{
+    if (ac > 1) {
+        if (open_directory(ft_strdup(av[1])))
+            return 1;
+    }
+    else {
+        if (open_directory(ft_strdup(".")))
+            return 1;
+    }
+    init_colum_info(0, 0);
 	return 0;
 }
