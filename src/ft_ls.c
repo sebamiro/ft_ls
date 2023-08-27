@@ -11,7 +11,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-#include "../inc/ft_ls.h"
+#include "ft_ls.h"
 #include "../inc/file.h"
 
 struct column_info {
@@ -73,7 +73,6 @@ init_colum_info(size_t max_idx, size_t total_files)
 typedef struct s_directory
 {
     char *name;
-    t_file *files;
     struct s_directory *next;
 } t_directory;
 
@@ -81,11 +80,15 @@ void
 dir_add_back(t_directory **dir, char *dir_name)
 {
     t_directory *temp = *dir;
+    t_directory *next = NULL;
     
-    while (temp->next)
+    while (~mode & REVERSE && temp->next)
         temp = temp->next;
+    if (mode & REVERSE)
+        next = temp->next;
     temp->next = ft_calloc(sizeof(t_directory), 1);
     temp->next->name = dir_name;
+    temp->next->next = next;
 }
 
 int
@@ -93,6 +96,8 @@ open_directory(char *dir_name)
 {
     struct dirent *rdir;
     t_directory *temp;
+    t_file *files = NULL;
+    t_file *last;
     DIR *dir;
 
     dir = opendir(dir_name);
@@ -106,28 +111,59 @@ open_directory(char *dir_name)
         return 1;
     temp->name = dir_name;
     while ((rdir = readdir(dir))) {
-        add_lexicographical(&(temp->files), rdir);
-        if (rdir->d_type & DT_DIR && ft_strncmp("..", rdir->d_name, ft_strlen(rdir->d_name)) < 0) {
+        if (~mode & ALL && rdir->d_name[0] == '.')
+            continue;
+        last = add_lexicographical(&(files), rdir);
+        if (mode & RECURSIVE && rdir->d_type & DT_DIR && ft_strncmp("..", rdir->d_name, 2) < 0) {
             char *_temp = ft_strjoin(dir_name, "/");
             dir_add_back(&temp, ft_strjoin(_temp, rdir->d_name));
             free(_temp);
         }
     }
+    for (t_file *i = files; i; i = i->next)
+        ft_printf("%s\n", i->d_name);
     closedir(dir);
-    for (t_file *i = temp->files; i; i = i->next)
-        ft_printf("%s\n", i->rdir->d_name);
-    temp = temp->next;
-    for (; temp; temp = temp->next) {
-        ft_printf("%s\n", temp->name);
-        open_directory(temp->name);
+    t_directory *next = temp->next;
+    free(temp->name);
+    free(temp);
+    while (mode & RECURSIVE && next) {
+        ft_printf("\n%s:\n", next->name);
+        open_directory(next->name);
+        next = next->next;
     }
     return 0;
+}
+
+bool
+_getopt(char *opt)
+{
+    if (opt[0] != '-')
+        return false;
+    for (int i = 1; opt[i]; i++) {
+        switch (opt[i]) {
+            case 'l':
+                mode |= LIST; break;
+            case 'R':
+                mode |= RECURSIVE; break;
+            case 'a':
+                mode |= ALL; break;
+            case 'r':
+                mode |= REVERSE; break;
+            case 't':
+                mode |= TIME; break;
+            default:
+                break;
+        }
+    }
+    return true;
 }
 
 int
 main(int ac, char **av)
 {
-    if (ac > 1) {
+    if (ac > 1 && _getopt(av[1]))
+        av = &av[1];
+    if (av[1]) {
         if (open_directory(ft_strdup(av[1])))
             return 1;
     }
