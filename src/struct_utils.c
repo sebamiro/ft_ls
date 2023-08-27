@@ -28,6 +28,18 @@ new_node(struct dirent *rdir)
 	return new;
 }
 
+void
+free_files(t_file *head)
+{
+    t_file *temp;
+
+    while (head) {
+        temp =  head;
+        head = head->next;
+        free(temp->d_name);
+        free(temp);
+    }
+}
 t_file*
 add_lexicographical(t_file **head, struct dirent *rdir)
 {
