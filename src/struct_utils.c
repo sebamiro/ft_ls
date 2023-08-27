@@ -23,6 +23,7 @@ new_node(struct dirent *rdir)
 	t_file *new = ft_calloc(1, sizeof(t_file));
 	if (!new)
 		return NULL;
+    new->d_name = ft_strdup(rdir->d_name);
 	new->rdir = rdir;
 	return new;
 }
@@ -49,7 +50,7 @@ add_lexicographical(t_file **head, struct dirent *rdir)
 				*head = new;
 			}
 			temp->previous = new;
-			return new;
+			return last_node(&new);
 		}
 		temp = temp->next;
 	}
