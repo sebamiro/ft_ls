@@ -5,6 +5,7 @@ struct dirent;
 typedef struct s_file
 {
 	struct dirent *rdir;
+    char *d_name;
 	struct s_file *next;
 	struct s_file *previous;
 }	t_file;
