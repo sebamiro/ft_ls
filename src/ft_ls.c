@@ -120,17 +120,23 @@ open_directory(char *dir_name)
             free(_temp);
         }
     }
-    for (t_file *i = files; i; i = i->next)
-        ft_printf("%s\n", i->d_name);
     closedir(dir);
+    for (t_file *i = files; ~mode & REVERSE && i; i = i->next)
+        ft_printf("%s\n", i->d_name);
+    for (; mode & REVERSE && last; last = last->previous)
+        ft_printf("%s\n", last->d_name);
     t_directory *next = temp->next;
     free(temp->name);
     free(temp);
     while (mode & RECURSIVE && next) {
         ft_printf("\n%s:\n", next->name);
         open_directory(next->name);
+        temp = next;
         next = next->next;
+        free(temp->name);
+        free(temp);
     }
+    free_files(files);
     return 0;
 }
 
