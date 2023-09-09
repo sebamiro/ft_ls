@@ -4,7 +4,6 @@
 
 #include <stdio.h>
 #include <dirent.h>
-#include <sys/dirent.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <sys/types.h>
@@ -19,6 +18,8 @@ struct column_info {
 	size_t	line_len;
 	size_t	*col_arr;
 };
+
+static char mode = 0;
 
 static struct column_info *column_info;
 
