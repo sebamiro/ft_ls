@@ -12,7 +12,7 @@ LIB_DIR		= lib/
 
 LINK		= -L lib/libft -lft
 
-CFLAGS		= -I $(INC) -MMD -MP -MF $(DEP_DIR)$*.d -Wall -Werror -Wextra
+CFLAGS		= -I $(INC) -MMD -MP -MF $(DEP_DIR)$*.d -Wall -Werror -Wextra -O3
 RM			= rm -rf
 CC			= gcc
 
