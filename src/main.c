@@ -1,3 +1,9 @@
+//
+// smiro
+// ft_ls	main.c
+// 2024-02
+//
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/_types/_ssize_t.h>
@@ -21,6 +27,8 @@ enum modes {
     REVERSE = 0x08,
     TIME = 0x10
 };
+
+#define USAGE write(2, "usage: ls [-lRart]\n", 20)
 
 enum file_type {
     unknown,
@@ -47,7 +55,7 @@ typedef struct s_fileinfo
     char acl;
 } t_fileinfo;
 
-static char mode = 0;
+static char flags = 0;
 t_pending *pending = NULL;
 t_fileinfo *cwd;
 void **sorted;
@@ -71,14 +79,21 @@ static char*
 file_name_concat(const char *dirname, const char *name)
 {
     size_t total;
-    char *cat; 
+    size_t dir_len;
+	size_t name_len;
+	size_t i;
+    char *cat;
 
-    total = ft_strlen(dirname) + ft_strlen(name) + 2;
+	dir_len = ft_strlen(dirname);
+	name_len = ft_strlen(name);
+    total = dir_len + name_len + 2;
     cat = xmalloc(total);
-    cat[0] = 0;
-    ft_strlcat(cat, dirname, total);
-    ft_strlcat(cat, "/", total);
-    ft_strlcat(cat, name, total);
+	for (i = 0; i < dir_len; i++)
+		cat[i] = dirname[i];
+	cat[i++] = '/';
+	for (; i < total - 1; i++)
+		cat[i] = name[i - dir_len - 1];
+	cat[i] = 0;
     return cat;
 }
 
@@ -113,22 +128,20 @@ sort_files(void)
     if (sorted_files_alloc < cwd_n + cwd_n / 2)
     {
         free(sorted);
-        sorted = xmalloc(cwd_n * 3 * sizeof *sorted);
-        sorted_files_alloc = 3 * cwd_n;
+        sorted = xmalloc(cwd_n * 2 * sizeof *sorted);
+        sorted_files_alloc = 2 * cwd_n;
     }
     initialize_sort();
-
     n = cwd_n;
     while (n > 1) {
         newn = 0;
         for (size_t i = 1; i <= n - 1; i++) {
-            int cmp = ft_strncmp(
+            int cmp = ft_strcmp(
                         ((t_fileinfo **)sorted)[i - 1]->name,
-                        ((t_fileinfo **)sorted)[i]->name,
-                        0xFFFFFF
+                        ((t_fileinfo **)sorted)[i]->name
                         );
-            if ((mode & REVERSE && cmp < 0) || (mode ^ REVERSE && cmp > 0)) {
-               t = sorted[i - 1]; 
+            if ((flags & REVERSE && cmp < 0) || (flags ^ REVERSE && cmp > 0)) {
+               t = sorted[i - 1];
                sorted[i - 1] = sorted[i];
                sorted[i] = t;
                newn = i;
@@ -168,6 +181,7 @@ print_byte_size(struct stat *s, bool print)
 static void
 print_n_link(struct stat *s, bool print)
 {
+	return ;
     static long long n = 10;
     static int ident = 1;
 
@@ -184,7 +198,7 @@ print_n_link(struct stat *s, bool print)
     print ? print_ident_digit(ident, s->st_nlink) : 0;
 }
 
-static void
+void
 has_acl(const char *absolute, t_fileinfo *f) {
     ssize_t xattr;
     acl_t acl = NULL;
@@ -199,10 +213,12 @@ has_acl(const char *absolute, t_fileinfo *f) {
     if (xattr > 0) {
         f->acl = '@';
     }
-    else if (acl)
+    else if (acl) {
         f->acl = '+';
-    else
+	}
+    else {
         f->acl = ' ';
+	}
     acl_free(acl);
 }
 
@@ -214,7 +230,7 @@ register_file(const char *name, const char *dirname, enum file_type type)
 
     block = 0;
     if (cwd_n == cwd_alloc) {
-        cwd = xrealloc(cwd,
+        cwd = realloc(cwd,
                2 * cwd_alloc * sizeof *cwd
                 );
         cwd_alloc *= 2;
@@ -224,7 +240,7 @@ register_file(const char *name, const char *dirname, enum file_type type)
     f->type = type;
     f->name = ft_strdup(name);
     cwd_n++;
-    if (mode & TIME || mode & LIST) {
+    if (flags & TIME || flags & LIST) {
         char *absolute;
 
         if (name[0] == '/' || dirname[0] == 0)
@@ -333,7 +349,7 @@ print_current_files(void)
     size_t i;
 
     for (i = 0; i < cwd_n; i++) {
-        if (mode & LIST)
+        if (flags & LIST)
             print_long_format(((t_fileinfo **)sorted)[i]);
         else
             print_one_per_line(((t_fileinfo **)sorted)[i]);
@@ -359,64 +375,35 @@ open_directory(const char *dir_name)
     print_byte_size(NULL, false);
     print_n_link(NULL, false);
 
-    while (1) {
-        rdir = readdir(dir);
-        if (rdir) {
-            enum file_type type = unknown;
+    while ((rdir = readdir(dir))) {
+		enum file_type type = unknown;
 
-            if (~mode & ALL && rdir->d_name[0] == '.')
-                continue ;
-            switch (rdir->d_type) {
-                case DT_BLK: type = blockdev; break;
-                case DT_CHR: type = chardev; break;
-                case DT_DIR: type = directory; break;
-                case DT_FIFO: type = fifo; break;
-                case DT_LNK: type = symbolic_link; break;
-                case DT_REG: type = normal; break;
-                case DT_SOCK: type = sock; break;
-            }
-            block += register_file(rdir->d_name, dir_name, type);
-        }
-        else
-            break;
+		if (~flags & ALL && rdir->d_name[0] == '.')
+			continue ;
+		switch (rdir->d_type) {
+			case DT_BLK: type = blockdev; break;
+			case DT_CHR: type = chardev; break;
+			case DT_DIR: type = directory; break;
+			case DT_FIFO: type = fifo; break;
+			case DT_LNK: type = symbolic_link; break;
+			case DT_REG: type = normal; break;
+			case DT_SOCK: type = sock; break;
+		}
+		block += register_file(rdir->d_name, dir_name, type);
     }
     closedir(dir);
     sort_files();
-    if (mode & RECURSIVE)
+    if (flags & RECURSIVE)
         extract_dir_from_files(dir_name);
     if (cwd_n) {
-        if (mode & LIST)
+        if (flags & LIST) {
             ft_printf("total %d\n", (int)block);
+		}
         print_current_files();
     }
 }
 
-static bool
-_getopt(char *opt)
-{
-    if (opt[0] != '-')
-        return false;
-    for (int i = 1; opt[i]; i++) {
-        switch (opt[i]) {
-            case 'l':
-                mode |= LIST; break;
-            case 'R':
-                mode |= RECURSIVE; break;
-            case 'a':
-                mode |= ALL; break;
-            case 'r':
-                mode |= REVERSE; break;
-            case 't':
-                mode |= TIME; break;
-            default:
-                write(2, "ft_ls: invalid option -- '", 27); 
-                write(2, &opt[i], 1); 
-                write(2, "'\n", 2); 
-                exit(2);
-        }
-    }
-    return true;
-}
+static bool _getopt(char *opt);
 
 int
 main(int ac, char **av)
@@ -442,3 +429,32 @@ main(int ac, char **av)
         free(pending_dir);
     }
 }
+
+static bool
+_getopt(char *opt)
+{
+    if (opt[0] != '-')
+        return false;
+    for (int i = 1; opt[i]; i++) {
+        switch (opt[i]) {
+            case 'l':
+                flags |= LIST; break;
+            case 'R':
+                flags |= RECURSIVE; break;
+            case 'a':
+                flags |= ALL; break;
+            case 'r':
+                flags |= REVERSE; break;
+            case 't':
+                flags |= TIME; break;
+            default:
+                write(2, "ft_ls: illegal option -- ", 26);
+                write(2, &opt[i], 1);
+                write(2, "\n", 1);
+				USAGE;
+                exit(1);
+        }
+    }
+    return true;
+}
+
