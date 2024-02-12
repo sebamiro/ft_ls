@@ -136,11 +136,17 @@ sort_files(void)
     while (n > 1) {
         newn = 0;
         for (size_t i = 1; i <= n - 1; i++) {
-            int cmp = ft_strcmp(
+            long long cmp = ft_strcmp(
                         ((t_fileinfo **)sorted)[i - 1]->name,
                         ((t_fileinfo **)sorted)[i]->name
                         );
-            if ((flags & REVERSE && cmp < 0) || (flags ^ REVERSE && cmp > 0)) {
+			if (flags & TIME) {
+				cmp = ((t_fileinfo **)sorted)[i]->stat.st_mtimespec.tv_sec - ((t_fileinfo **)sorted)[i - 1]->stat.st_mtimespec.tv_sec;
+			}
+			if (flags & REVERSE) {
+				cmp *= -1;
+			}
+			if (cmp > 0) {
                t = sorted[i - 1];
                sorted[i - 1] = sorted[i];
                sorted[i] = t;
@@ -235,18 +241,17 @@ register_file(const char *name, const char *dirname, enum file_type type)
                 );
         cwd_alloc *= 2;
     }
-    f = &cwd[cwd_n];
-    ft_bzero(f, sizeof *f);
+    f = &cwd[cwd_n++];
     f->type = type;
     f->name = ft_strdup(name);
-    cwd_n++;
     if (flags & TIME || flags & LIST) {
         char *absolute;
 
-        if (name[0] == '/' || dirname[0] == 0)
+        if (name[0] == '/' || dirname[0] == 0) {
             absolute = (char *)name;
-        else
+		} else {
             absolute = file_name_concat(dirname, name);
+		}
         stat(absolute, &f->stat);
         has_acl(absolute, f);
         print_byte_size(&f->stat, false);
