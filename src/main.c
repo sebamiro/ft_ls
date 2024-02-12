@@ -361,19 +361,19 @@ print_current_files(void)
     }
 }
 
-void
+int
 open_directory(const char *dir_name)
 {
     DIR *dir;
     struct dirent *rdir;
-    size_t block;
+	size_t block;
 
     block = 0;
     dir = opendir(dir_name);
     if (!dir) {
         write(2, "ft_ls: ", 7);
         perror(dir_name);
-        return ;
+        return 1;
     }
 
     clear_file();
@@ -406,6 +406,7 @@ open_directory(const char *dir_name)
 		}
         print_current_files();
     }
+	return 0;
 }
 
 static bool _getopt(char *opt);
@@ -414,7 +415,9 @@ int
 main(int ac, char **av)
 {
     t_pending *pending_dir;
+	int error;
 
+	error = 0;
     if (ac > 1 && _getopt(av[1]))
         av = &av[1];
 
@@ -422,17 +425,18 @@ main(int ac, char **av)
     cwd = xmalloc(cwd_alloc * sizeof *cwd);
     cwd_n = 0;
 
-    open_directory(av[1] ? av[1] : ".");
+    error = error || open_directory(av[1] ? av[1] : ".");
     while (pending) {
         pending_dir = pending;
         write(1, "\n", 1);
         write(1, pending_dir->name, ft_strlen(pending_dir->name));
         write(1, ":\n", 2);
         pending = pending->next;
-        open_directory(pending_dir->name);
+        error = error || open_directory(pending_dir->name);
         free(pending_dir->name);
         free(pending_dir);
     }
+	return error;
 }
 
 static bool
