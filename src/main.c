@@ -11,7 +11,6 @@
 
 #include <stdbool.h>
 #include <stdio.h>
-#include <sys/dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -20,24 +19,20 @@ static bool get_opt(const char *opt);
 static void *xmalloc(size_t size);
 static char *xstrdup(const char *s);
 static int open_directroy(const char *dir_name);
+static int open_pending(int error, pending_t *pending_dir);
 
 int main(int ac, char **av)
 {
-	int			error;
-
-	(void)ac;
-	if (get_opt(*(++av))) {
+	if (ac && get_opt(*(++av))) {
 		av++;
 	}
 	cwd_alloc = 100;
 	cwd = xmalloc(cwd_alloc * sizeof *cwd);
 	cwd_n = 0;
-	error = 0;
-	return open_directroy(*av ? *av : ".");
+	return open_pending(open_directroy(*av ? *av : "."), pending);
 }
 
 static void clear_files(void);
-static int open_pending(pending_t *);
 static file_type get_type(unsigned char);
 static size_t register_file(const char *, const char *, file_type);
 static void sort_files(void);
@@ -52,7 +47,7 @@ static int open_directroy(const char *dir_name)
 
 	if (!(dir = opendir(dir_name))) {
 		write(2, "ft_ls: ", 7);
-		perror(dir_name);
+		perror(ft_strrchr(dir_name, '/') + 1);
 		return 1;
 	}
 	block = 0;
@@ -70,11 +65,11 @@ static int open_directroy(const char *dir_name)
 			extract_dir(dir_name);
 		}
 		if (flags & LIST) {
-			/* ft_printf("total %d\n", (int)block); */
+			//ft_printf("total %d\n", (int)block);
 		}
 		print_current_files();
 	}
-	return open_pending(pending);
+	return 0;
 }
 
 static void print_one_per_line(const char *file_name);
@@ -125,7 +120,7 @@ static void queue_directory(const char *name)
 {
 	pending_t *n;
 
-	n = xmalloc(sizeof(pending_t));
+	n = xmalloc(sizeof * pending);
 	n->name = xstrdup(name);
 	n->next = pending;
 	pending = n;
@@ -147,7 +142,7 @@ static void sort_files(void)
 	size_t i, n, newn;
 	long long cmp;
 
-	if (sorted_alloc < cwd_n) {
+	if (sorted_alloc < cwd_n * 1.5) {
 		sorted_alloc = cwd_n * 2;
 		sorted = realloc(sorted, sorted_alloc * sizeof *sorted);
 		if (!sorted) {
@@ -194,7 +189,6 @@ static size_t register_file(const char *name, const char *dirname, file_type t)
 {
 	fileinfo_t *f;
 
-	(void)dirname;
 	if (cwd_n == cwd_alloc) {
 		cwd_alloc = cwd_alloc * 2;
 		cwd = realloc(cwd, cwd_alloc * sizeof *cwd);
@@ -260,20 +254,20 @@ static void clear_files(void)
 
 static void print_dir_name(const char *name);
 
-static int open_pending(pending_t *pending_dir)
+static int open_pending(int error, pending_t *pending_dir)
 {
-	pending_t	*next;
-	int error;
+	char *dir;
 
 	if (!pending_dir) {
-		return 0;
+		return error;
 	}
-	error = open_directroy(pending_dir->name);
-	print_dir_name(pending_dir->name);
-	next = pending_dir->next;
-	free(pending_dir->name);
+	dir = pending_dir->name;
+	pending = pending_dir->next;
 	free(pending_dir);
-	return error || open_pending(next);
+	print_dir_name(dir);
+	error = open_directroy(dir) || error;
+	free(dir);
+	return open_pending(error, pending);
 }
 
 static void print_dir_name(const char *name)
