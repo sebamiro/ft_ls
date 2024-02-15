@@ -60,10 +60,10 @@ static int open_directroy(const char *dir_name)
 	}
 	closedir(dir);
 	sort_files();
+	if (flags & RECURSIVE) {
+		extract_dir(dir_name);
+	}
 	if (cwd_n) {
-		if (flags & RECURSIVE) {
-			extract_dir(dir_name);
-		}
 		if (flags & LIST) {
 			//ft_printf("total %d\n", (int)block);
 		}
