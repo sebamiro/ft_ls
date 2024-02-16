@@ -1,7 +1,6 @@
-*.o
 a.out
+*.o
 *.d
 *.a
-obj/
-dep/
+build/
 ft_ls
