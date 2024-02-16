@@ -43,6 +43,7 @@ typedef struct s_fileinfo
     file_type	type;
     struct stat stat;
     char		acl;
+    char		*link;
 } fileinfo_t;
 
 typedef char flag_t;
