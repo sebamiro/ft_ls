@@ -107,6 +107,7 @@ static void print_one_per_line(const char *file_name)
 static void print_file_rights(const fileinfo_t *f);
 static void print_owner(const struct stat *s);
 static void print_group(const struct stat *s);
+static void print_time(const fileinfo_t *f);
 
 static void print_long_format(const fileinfo_t *f)
 {
@@ -116,10 +117,28 @@ static void print_long_format(const fileinfo_t *f)
 	print_owner(&f->stat);
 	print_group(&f->stat);
 	print_byte_size(&f->stat, true);
-	write(1, ctime((time_t *)&f->stat.st_mtimespec) + 4, 12);
-    write(1, " ", 1);
+	print_time(f);
     write(1, f->name, ft_strlen(f->name));
+	if (f->type == symbolic_link) {
+		write(1, " -> ", 4);
+		write(1, f->link, ft_strlen(f->link));
+	}
     write(1, "\n", 1);
+}
+
+static void print_time(const fileinfo_t *f)
+{
+	time_t now = time(NULL);
+	char *file_time = ctime((time_t *)&f->stat.st_mtimespec) + 4;
+
+
+	if (f->stat.st_mtimespec.tv_sec + 15778463 < now) {
+		write(1, file_time, 7);
+		write(1, file_time + 15, 5);
+	} else {
+		write(1, file_time, 12);
+	}
+	write(1, " ", 1);
 }
 
 static void print_group(const struct stat *s)
@@ -270,10 +289,17 @@ static size_t register_file(const char *name, const char *dirname, file_type t)
 	if (flags & TIME || flags & LIST) {
 		char absolute[1024];
 		file_name_concat(absolute, dirname, name);
-		stat(absolute, &f->stat);
+		if (t == symbolic_link) {
+			char link[1024];
+			lstat(absolute, &f->stat);
+			link[readlink(absolute, link, 1024)] = 0;
+			f->link = xstrdup(link);
+		} else {
+			stat(absolute, &f->stat);
+		}
 		has_acl(absolute, f);
 		print_byte_size(&f->stat, false);
-		print_byte_size(&f->stat, false);
+		print_n_link(&f->stat, false);
 		return f->stat.st_blocks;
 	}
 	return 0;
