@@ -14,6 +14,12 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <pwd.h>
+#include <grp.h>
+#include <time.h>
+#include <sys/acl.h>
+#include <sys/xattr.h>
+
 
 static bool get_opt(const char *opt);
 static void *xmalloc(size_t size);
@@ -38,6 +44,8 @@ static size_t register_file(const char *, const char *, file_type);
 static void sort_files(void);
 static void extract_dir(const char *dir_name);
 static void print_current_files(void);
+static void print_byte_size(const struct stat *s, bool print);
+static void print_n_link(const struct stat *s, bool print);
 
 static int open_directroy(const char *dir_name)
 {
@@ -52,6 +60,8 @@ static int open_directroy(const char *dir_name)
 	}
 	block = 0;
 	clear_files();
+	print_byte_size(NULL, false);
+	print_n_link(NULL, false);
 	while ((rdir = readdir(dir))) {
 		if (~flags & ALL && rdir->d_name[0] == '.') {
 			continue;
@@ -65,7 +75,7 @@ static int open_directroy(const char *dir_name)
 			extract_dir(dir_name);
 		}
 		if (flags & LIST) {
-			//ft_printf("total %d\n", (int)block);
+			ft_printf("total %d\n", (int)block);
 		}
 		print_current_files();
 	}
@@ -73,6 +83,7 @@ static int open_directroy(const char *dir_name)
 }
 
 static void print_one_per_line(const char *file_name);
+static void print_long_format(const fileinfo_t *f);
 
 static void print_current_files(void)
 {
@@ -80,7 +91,7 @@ static void print_current_files(void)
 
 	for (i = 0; i < cwd_n; i++) {
 		if (flags & LIST) {
-			// TODO
+			print_long_format(((fileinfo_t **)sorted)[i]);
 		} else {
 			print_one_per_line(((fileinfo_t **)sorted)[i]->name);
 		}
@@ -91,6 +102,62 @@ static void print_one_per_line(const char *file_name)
 {
 	write(1, file_name, ft_strlen(file_name));
 	write(1, "\n", 1);
+}
+
+static void print_file_rights(const fileinfo_t *f);
+static void print_owner(const struct stat *s);
+static void print_group(const struct stat *s);
+
+static void print_long_format(const fileinfo_t *f)
+{
+	ft_putchar_fd(f->type == directory ? 'd' : f->type == symbolic_link ? 'l' : '-', 1);
+	print_file_rights(f);
+	print_n_link(&f->stat, true);
+	print_owner(&f->stat);
+	print_group(&f->stat);
+	print_byte_size(&f->stat, true);
+	write(1, ctime((time_t *)&f->stat.st_mtimespec) + 4, 12);
+    write(1, " ", 1);
+    write(1, f->name, ft_strlen(f->name));
+    write(1, "\n", 1);
+}
+
+static void print_group(const struct stat *s)
+{
+    char *group;
+
+    group = getgrgid(s->st_gid)->gr_name;
+    write(1, group, ft_strlen(group));
+    write(1, "  ", 2);
+}
+
+static void print_owner(const struct stat *s)
+{
+    char *owner;
+
+    owner = getpwuid(s->st_uid)->pw_name;
+    write(1, owner, ft_strlen(owner));
+    write(1, "  ", 2);
+}
+
+static void print_file_rights(const fileinfo_t *f)
+{
+	const char m[3] = "rwx";
+	char rights[11];
+	int x = S_IRUSR;
+	size_t i;
+
+	for (i = 0; i < 9; i++) {
+		if (f->stat.st_mode & x) {
+			rights[i] = m[i % 3];
+		} else {
+			rights[i] = '-';
+		}
+		x >>= 1;
+	}
+	rights[9] = f->acl;
+	rights[10] = ' ';
+	write(1, rights, 11);
 }
 
 static bool dot_or_dotdot(const char *);
@@ -184,6 +251,7 @@ static void initialize_sort(void)
 	}
 }
 
+static void has_acl(const char *absolute, fileinfo_t *f);
 
 static size_t register_file(const char *name, const char *dirname, file_type t)
 {
@@ -203,12 +271,77 @@ static size_t register_file(const char *name, const char *dirname, file_type t)
 		char absolute[1024];
 		file_name_concat(absolute, dirname, name);
 		stat(absolute, &f->stat);
-		// acl
-		// byte size
-		// n link
+		has_acl(absolute, f);
+		print_byte_size(&f->stat, false);
+		print_byte_size(&f->stat, false);
 		return f->stat.st_blocks;
 	}
 	return 0;
+}
+
+static void print_ident_digit(int ident, int digit);
+
+static void print_byte_size(const struct stat *s, bool print)
+{
+    static long long n = 10;
+    static int ident = 1;
+
+    if (!s) {
+        n = 10;
+        ident = 1;
+        return ;
+    }
+    while (s->st_size >= n) {
+        n *= 10;
+        ident += 1;
+    }
+    print ? print_ident_digit(ident, s->st_size) : 0;
+}
+
+static void print_n_link(const struct stat *s, bool print)
+{
+    static long long n = 10;
+    static int ident = 1;
+
+    if (!s) {
+        n = 10;
+        ident = 1;
+        return ;
+    }
+    while (s->st_nlink >= n) {
+        n *= 10;
+        ident += 1;
+    }
+    print ? print_ident_digit(ident, s->st_nlink) : 0;
+}
+
+static void print_ident_digit(int ident, int digit)
+{
+    static char str[5] = "%xd ";
+    str[1] = ident + 0x30;
+    ft_printf(str, digit);
+}
+
+static void has_acl(const char *absolute, fileinfo_t *f)
+{
+	ssize_t xattr;
+	acl_t acl = NULL;
+	acl_entry_t dummy;
+
+	xattr = listxattr(absolute, NULL, 0, XATTR_NOFOLLOW);
+	acl = acl_get_link_np(absolute, ACL_TYPE_EXTENDED);
+	if (acl && acl_get_entry(acl, ACL_FIRST_ENTRY, &dummy) == -1) {
+		acl_free(acl);
+		acl = NULL;
+	}
+	if (xattr > 0) {
+		f->acl = '@';
+	} else if (acl) {
+		f->acl = '+';
+	} else {
+		f->acl = ' ';
+	}
+	acl_free(acl);
 }
 
 static void file_name_concat(char *dest, const char *dir, const char *file)
