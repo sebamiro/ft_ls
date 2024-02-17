@@ -10,7 +10,13 @@
 # include <sys/stat.h>
 # include <stdlib.h>
 
-# define USAGE write(2, "usage: ft_ls [-lRart]\n", 22);
+# define USAGE write(2, "usage: ft_ls [-lRartG]\n", 22);
+
+# define RESET "\e[0m"
+# define RED   "\e[31m"
+# define GREEN "\e[32m"
+# define BLUE  "\e[34m"
+# define PURPLE "\e[35m"
 
 enum flags {
 	LIST =		0x01,
@@ -18,6 +24,8 @@ enum flags {
 	ALL	=		0x04,
 	REVERSE =	0x08,
 	TIME =		0x10,
+	COLORS =	0x20,
+	NO_SORT =	0x40,
 };
 
 typedef enum e_file_type {
@@ -48,15 +56,5 @@ typedef struct s_fileinfo
 
 typedef char flag_t;
 
-flag_t flags = 0;
-
-pending_t	*pending = NULL;
-
-fileinfo_t	*cwd;
-size_t		cwd_n;
-size_t		cwd_alloc;
-
-void		**sorted = NULL;
-size_t		sorted_alloc = 0;
 
 #endif
