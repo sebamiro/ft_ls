@@ -20,6 +20,16 @@
 #include <sys/acl.h>
 #include <sys/xattr.h>
 
+flag_t flags = 0;
+
+pending_t	*pending = NULL;
+
+fileinfo_t	*cwd;
+size_t		cwd_n;
+size_t		cwd_alloc;
+
+void		**sorted = NULL;
+size_t		sorted_alloc = 0;
 
 static bool get_opt(const char *opt);
 static void *xmalloc(size_t size);
@@ -46,6 +56,7 @@ static void extract_dir(const char *dir_name);
 static void print_current_files(void);
 static void print_byte_size(const struct stat *s, bool print);
 static void print_n_link(const struct stat *s, bool print);
+static void print_group(const struct stat *s, bool print);
 
 static int open_directroy(const char *dir_name)
 {
@@ -55,13 +66,14 @@ static int open_directroy(const char *dir_name)
 
 	if (!(dir = opendir(dir_name))) {
 		write(2, "ft_ls: ", 7);
-		perror(ft_strrchr(dir_name, '/') + 1);
+		perror(dir_name);
 		return 1;
 	}
 	block = 0;
 	clear_files();
 	print_byte_size(NULL, false);
 	print_n_link(NULL, false);
+	print_group(NULL, false);
 	while ((rdir = readdir(dir))) {
 		if (~flags & ALL && rdir->d_name[0] == '.') {
 			continue;
@@ -82,7 +94,7 @@ static int open_directroy(const char *dir_name)
 	return 0;
 }
 
-static void print_one_per_line(const char *file_name);
+static void print_one_per_line(const fileinfo_t *f);
 static void print_long_format(const fileinfo_t *f);
 
 static void print_current_files(void)
@@ -93,32 +105,51 @@ static void print_current_files(void)
 		if (flags & LIST) {
 			print_long_format(((fileinfo_t **)sorted)[i]);
 		} else {
-			print_one_per_line(((fileinfo_t **)sorted)[i]->name);
+			print_one_per_line(((fileinfo_t **)sorted)[i]);
 		}
 	}
 }
 
-static void print_one_per_line(const char *file_name)
+static void print_file_name(const fileinfo_t *f);
+
+static void print_one_per_line(const fileinfo_t *f)
 {
-	write(1, file_name, ft_strlen(file_name));
+	print_file_name(f);
 	write(1, "\n", 1);
+}
+
+static void print_file_name(const fileinfo_t *f)
+{
+	if (flags & COLORS) {
+		switch (f->type) {
+			case directory: write(1, BLUE, 5); break;
+			case sock: write(1, GREEN, 5); break;
+			case symbolic_link: write(1, PURPLE, 5); break;
+			default:
+				if (f->stat.st_mode & S_IXUSR) {
+					write(1, RED, 5);
+				}
+		}
+	}
+	write(1, f->name, ft_strlen(f->name));
+	write(1, RESET, 5);
 }
 
 static void print_file_rights(const fileinfo_t *f);
 static void print_owner(const struct stat *s);
-static void print_group(const struct stat *s);
 static void print_time(const fileinfo_t *f);
+static char get_type_char(file_type t);
 
 static void print_long_format(const fileinfo_t *f)
 {
-	ft_putchar_fd(f->type == directory ? 'd' : f->type == symbolic_link ? 'l' : '-', 1);
+	ft_putchar_fd(get_type_char(f->type), 1);
 	print_file_rights(f);
 	print_n_link(&f->stat, true);
 	print_owner(&f->stat);
-	print_group(&f->stat);
+	print_group(&f->stat, true);
 	print_byte_size(&f->stat, true);
 	print_time(f);
-    write(1, f->name, ft_strlen(f->name));
+	print_file_name(f);
 	if (f->type == symbolic_link) {
 		write(1, " -> ", 4);
 		write(1, f->link, ft_strlen(f->link));
@@ -141,13 +172,25 @@ static void print_time(const fileinfo_t *f)
 	write(1, " ", 1);
 }
 
-static void print_group(const struct stat *s)
+static void print_group(const struct stat *s, bool print)
 {
     char *group;
+	static size_t ident = 0;
+	size_t len;
 
+	if (!s) {
+		ident = 0;
+		return ;
+	}
     group = getgrgid(s->st_gid)->gr_name;
-    write(1, group, ft_strlen(group));
-    write(1, "  ", 2);
+	len = ft_strlen(group);
+	if (len + 1 > ident) {
+		ident = len + 1;
+	}
+	if (print) {
+		write(1, group, len);
+		identprint(ident - len);
+	}
 }
 
 static void print_owner(const struct stat *s)
@@ -155,8 +198,7 @@ static void print_owner(const struct stat *s)
     char *owner;
 
     owner = getpwuid(s->st_uid)->pw_name;
-    write(1, owner, ft_strlen(owner));
-    write(1, "  ", 2);
+	ft_printf("%7:s", owner);
 }
 
 static void print_file_rights(const fileinfo_t *f)
@@ -174,9 +216,29 @@ static void print_file_rights(const fileinfo_t *f)
 		}
 		x >>= 1;
 	}
+	if (f->stat.st_mode & 0001000) {
+		if (f->stat.st_mode & S_IXOTH) {
+			rights[8] = 't';
+		} else {
+			rights[8] = 'T';
+		}
+	}
 	rights[9] = f->acl;
 	rights[10] = ' ';
 	write(1, rights, 11);
+}
+
+static char get_type_char(file_type t)
+{
+	switch (t) {
+		case blockdev: return 'b';
+		case chardev: return 'c';
+		case directory: return 'd';
+		case fifo: return 'p';
+		case symbolic_link: return 'l';
+		case sock: return 's';
+		default: return '-';
+	}
 }
 
 static bool dot_or_dotdot(const char *);
@@ -236,6 +298,9 @@ static void sort_files(void)
 		}
 	}
 	initialize_sort();
+	if (flags & NO_SORT) {
+		return;
+	}
 	n = cwd_n;
 	while (n > 1) {
 		newn = 0;
@@ -243,7 +308,8 @@ static void sort_files(void)
 			if (flags & TIME) {
 				cmp = ((fileinfo_t **)sorted)[i]->stat.st_mtimespec.tv_sec
 					- ((fileinfo_t **)sorted)[i - 1]->stat.st_mtimespec.tv_sec;
-			} else {
+			}
+			if (~flags & TIME || cmp == 0) {
 				cmp = ft_strcmp(((fileinfo_t **)sorted)[i - 1]->name,
 						((fileinfo_t **)sorted)[i]->name);
 			}
@@ -286,7 +352,7 @@ static size_t register_file(const char *name, const char *dirname, file_type t)
 	f = &cwd[cwd_n++];
 	f->type = t;
 	f->name = xstrdup(name);
-	if (flags & TIME || flags & LIST) {
+	if (flags & TIME || flags & LIST || flags & COLORS) {
 		char absolute[1024];
 		file_name_concat(absolute, dirname, name);
 		if (t == symbolic_link) {
@@ -300,6 +366,7 @@ static size_t register_file(const char *name, const char *dirname, file_type t)
 		has_acl(absolute, f);
 		print_byte_size(&f->stat, false);
 		print_n_link(&f->stat, false);
+		print_group(&f->stat, false);
 		return f->stat.st_blocks;
 	}
 	return 0;
@@ -309,12 +376,12 @@ static void print_ident_digit(int ident, int digit);
 
 static void print_byte_size(const struct stat *s, bool print)
 {
-    static long long n = 10;
-    static int ident = 1;
+    static long long n = 1000;
+    static int ident = 2;
 
     if (!s) {
         n = 10;
-        ident = 1;
+        ident = 2;
         return ;
     }
     while (s->st_size >= n) {
@@ -343,9 +410,8 @@ static void print_n_link(const struct stat *s, bool print)
 
 static void print_ident_digit(int ident, int digit)
 {
-    static char str[5] = "%xd ";
-    str[1] = ident + 0x30;
-    ft_printf(str, digit);
+	ftputnbr(digit, ident);
+	write(1, " ", 1);
 }
 
 static void has_acl(const char *absolute, fileinfo_t *f)
@@ -407,6 +473,8 @@ static void clear_files(void)
 	for (i = 0; i < cwd_n; i++) {
 		fileinfo_t *f = sorted[i];
 		free(f->name);
+		free(f->link);
+		f->link = NULL;
 	}
 	cwd_n = 0;
 }
@@ -438,7 +506,7 @@ static void print_dir_name(const char *name)
 
 static bool get_opt(const char *opt)
 {
-	if (!opt || *(opt++) != '-') {
+	if (!opt || *(opt++) != '-' || !*opt) {
 		return false;
 	}
 	while (*opt) {
@@ -449,10 +517,15 @@ static bool get_opt(const char *opt)
 				flags |= RECURSIVE; break;
 			case 'a':
 				flags |= ALL; break;
+			case 'f':
+				flags |= ALL; break;
+				flags |= NO_SORT; break;
 			case 'r':
 				flags |= REVERSE; break;
 			case 't':
 				flags |= TIME; break;
+			case 'G':
+				flags |= COLORS; break;
 			default:
 				write(2, "ft_ls: illegal option -- ", 26);
 				write(2, opt, 1);
